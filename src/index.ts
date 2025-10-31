@@ -16,6 +16,9 @@ import { SlideService } from "./services/SlideService.js";
 // Import tool definitions
 import * as tools from "./tools/index.js";
 
+// Import types
+import { TextFormatting, CellFormatting, RGBColor } from "./utils/FormattingHelper.js";
+
 /**
  * Main MCP Server
  * DIP: Depends on interfaces (IDocumentService, etc.), not concrete implementations
@@ -48,7 +51,7 @@ class GoogleWorkspaceMCPServer {
    * Initialize services with authentication
    * Lazy initialization - only create services when needed
    */
-  private async initializeServices() {
+  private async initializeServices(): Promise<void> {
     if (this.documentService) {
       return; // Already initialized
     }
@@ -57,6 +60,17 @@ class GoogleWorkspaceMCPServer {
     this.documentService = new DocumentService(authClient);
     this.sheetService = new SheetService(authClient);
     this.slideService = new SlideService(authClient);
+  }
+
+  /**
+   * Ensures services are initialized before use
+   * Throws clear error if services are not available
+   * After this check, services are guaranteed to be non-null (! is safe to use)
+   */
+  private ensureServicesInitialized(): void {
+    if (!this.documentService || !this.sheetService || !this.slideService) {
+      throw new Error('Services not initialized. This should not happen.');
+    }
   }
 
   /**
@@ -97,6 +111,7 @@ class GoogleWorkspaceMCPServer {
       try {
         // Initialize services if not already done
         await this.initializeServices();
+        this.ensureServicesInitialized();
 
         const { name, arguments: args } = request.params;
 
@@ -110,6 +125,7 @@ class GoogleWorkspaceMCPServer {
           // ========== DOCUMENT OPERATIONS ==========
           case "create_document": {
             const { title } = args as { title: string };
+            // Safe: ensureServicesInitialized guarantees non-null
             const result = await this.documentService!.createDocument(title);
             return {
               content: [
@@ -123,6 +139,7 @@ class GoogleWorkspaceMCPServer {
 
           case "read_document": {
             const { documentId } = args as { documentId: string };
+            // Safe: ensureServicesInitialized guarantees non-null
             const content = await this.documentService!.readDocument(
               documentId
             );
@@ -202,13 +219,14 @@ class GoogleWorkspaceMCPServer {
               bold?: boolean;
               italic?: boolean;
               underline?: boolean;
-              foregroundColor?: { red: number; green: number; blue: number };
+              foregroundColor?: RGBColor;
             };
-            const formatting: any = {};
-            if (bold !== undefined) formatting.bold = bold;
-            if (italic !== undefined) formatting.italic = italic;
-            if (underline !== undefined) formatting.underline = underline;
-            if (foregroundColor) formatting.foregroundColor = foregroundColor;
+            const formatting: TextFormatting = {
+              bold,
+              italic,
+              underline,
+              foregroundColor,
+            };
 
             await this.documentService!.formatText(
               documentId,
@@ -283,15 +301,16 @@ class GoogleWorkspaceMCPServer {
               bold?: boolean;
               italic?: boolean;
               underline?: boolean;
-              foregroundColor?: { red: number; green: number; blue: number };
-              backgroundColor?: { red: number; green: number; blue: number };
+              foregroundColor?: RGBColor;
+              backgroundColor?: RGBColor;
             };
-            const formatting: any = {};
-            if (bold !== undefined) formatting.bold = bold;
-            if (italic !== undefined) formatting.italic = italic;
-            if (underline !== undefined) formatting.underline = underline;
-            if (foregroundColor) formatting.foregroundColor = foregroundColor;
-            if (backgroundColor) formatting.backgroundColor = backgroundColor;
+            const formatting: CellFormatting = {
+              bold,
+              italic,
+              underline,
+              foregroundColor,
+              backgroundColor,
+            };
 
             await this.sheetService!.formatCells(
               spreadsheetId,
@@ -426,13 +445,14 @@ class GoogleWorkspaceMCPServer {
               bold?: boolean;
               italic?: boolean;
               underline?: boolean;
-              foregroundColor?: { red: number; green: number; blue: number };
+              foregroundColor?: RGBColor;
             };
-            const formatting: any = {};
-            if (bold !== undefined) formatting.bold = bold;
-            if (italic !== undefined) formatting.italic = italic;
-            if (underline !== undefined) formatting.underline = underline;
-            if (foregroundColor) formatting.foregroundColor = foregroundColor;
+            const formatting: TextFormatting = {
+              bold,
+              italic,
+              underline,
+              foregroundColor,
+            };
 
             await this.slideService!.formatTextInSlide(
               presentationId,

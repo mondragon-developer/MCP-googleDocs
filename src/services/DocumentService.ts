@@ -1,6 +1,8 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'googleapis-common';
 import { IDocumentService } from '../interfaces/IDocumentService.js';
+import { DriveUploadHelper } from '../utils/DriveUploadHelper.js';
+import { FormattingHelper, TextFormatting } from '../utils/FormattingHelper.js';
 
 /**
  * DocumentService: Responsible ONLY for Google Docs operations
@@ -8,7 +10,7 @@ import { IDocumentService } from '../interfaces/IDocumentService.js';
  */
 export class DocumentService implements IDocumentService {
   private readonly docs;
-  private readonly drive;
+  private readonly driveHelper;
 
   /**
    * Constructor receives authenticated client (Dependency Injection)
@@ -16,7 +18,7 @@ export class DocumentService implements IDocumentService {
    */
   constructor(private authClient: OAuth2Client) {
     this.docs = google.docs({ version: 'v1', auth: authClient });
-    this.drive = google.drive({ version: 'v3', auth: authClient });
+    this.driveHelper = new DriveUploadHelper(authClient);
   }
 
   /**
@@ -156,38 +158,8 @@ export class DocumentService implements IDocumentService {
    */
   async insertLocalImage(documentId: string, filePath: string, index: number): Promise<void> {
     try {
-      const fs = await import('fs');
-      const path = await import('path');
-
-      // Read the file
-      const fileName = path.basename(filePath);
-
-      // Upload to Drive
-      const driveResponse = await this.drive.files.create({
-        requestBody: {
-          name: fileName,
-          mimeType: 'image/jpeg', // Adjust based on file type
-        },
-        media: {
-          mimeType: 'image/jpeg',
-          body: fs.createReadStream(filePath),
-        },
-        fields: 'id, webContentLink',
-      });
-
-      const fileId = driveResponse.data.id!;
-
-      // Make file publicly accessible
-      await this.drive.permissions.create({
-        fileId: fileId,
-        requestBody: {
-          role: 'reader',
-          type: 'anyone',
-        },
-      });
-
-      // Get the public URL
-      const imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+      // Upload file securely and get public URL (includes path validation)
+      const imageUrl = await this.driveHelper.uploadImageAndGetPublicUrl(filePath);
 
       // Insert the image using the existing method
       await this.insertImage(documentId, imageUrl, index);
@@ -207,42 +179,28 @@ export class DocumentService implements IDocumentService {
     documentId: string,
     startIndex: number,
     endIndex: number,
-    formatting: {
-      bold?: boolean;
-      italic?: boolean;
-      underline?: boolean;
-      foregroundColor?: { red: number; green: number; blue: number };
-    }
+    formatting: TextFormatting
   ): Promise<void> {
     try {
-      const requests: any[] = [];
-      const textStyle: any = {};
-      const fields: string[] = [];
-
-      // Build text style object based on provided formatting
-      if (formatting.bold !== undefined) {
-        textStyle.bold = formatting.bold;
-        fields.push('bold');
-      }
-      if (formatting.italic !== undefined) {
-        textStyle.italic = formatting.italic;
-        fields.push('italic');
-      }
-      if (formatting.underline !== undefined) {
-        textStyle.underline = formatting.underline;
-        fields.push('underline');
-      }
+      // Validate color if provided
       if (formatting.foregroundColor) {
+        FormattingHelper.validateColor(formatting.foregroundColor);
+      }
+
+      const { style, fields } = FormattingHelper.buildTextFormatting(formatting);
+
+      // Convert formatting to Google Docs format (needs nested color structure)
+      const textStyle: any = { ...style };
+      if (style.foregroundColor) {
         textStyle.foregroundColor = {
           color: {
-            rgbColor: formatting.foregroundColor,
+            rgbColor: style.foregroundColor,
           },
         };
-        fields.push('foregroundColor');
       }
 
       // Create the update request
-      requests.push({
+      const requests = [{
         updateTextStyle: {
           range: {
             startIndex: startIndex,
@@ -251,7 +209,7 @@ export class DocumentService implements IDocumentService {
           textStyle: textStyle,
           fields: fields.join(','),
         },
-      });
+      }];
 
       await this.docs.documents.batchUpdate({
         documentId: documentId,

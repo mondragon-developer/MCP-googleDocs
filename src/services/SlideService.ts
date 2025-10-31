@@ -1,6 +1,8 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'googleapis-common';
 import { ISlideService } from '../interfaces/ISlideService.js';
+import { DriveUploadHelper } from '../utils/DriveUploadHelper.js';
+import { FormattingHelper, TextFormatting } from '../utils/FormattingHelper.js';
 
 /**
  * SlideService: Responsible ONLY for Google Slides operations
@@ -8,9 +10,11 @@ import { ISlideService } from '../interfaces/ISlideService.js';
  */
 export class SlideService implements ISlideService {
   private readonly slides;
+  private readonly driveHelper;
 
   constructor(private authClient: OAuth2Client) {
     this.slides = google.slides({ version: 'v1', auth: authClient });
+    this.driveHelper = new DriveUploadHelper(authClient);
   }
 
   /**
@@ -196,40 +200,8 @@ export class SlideService implements ISlideService {
     filePath: string
   ): Promise<void> {
     try {
-      const fs = await import('fs');
-      const path = await import('path');
-      const drive = google.drive({ version: 'v3', auth: this.authClient });
-
-      // Read the file
-      const fileBuffer = fs.readFileSync(filePath);
-      const fileName = path.basename(filePath);
-
-      // Upload to Drive
-      const driveResponse = await drive.files.create({
-        requestBody: {
-          name: fileName,
-          mimeType: 'image/jpeg', // Adjust based on file type
-        },
-        media: {
-          mimeType: 'image/jpeg',
-          body: fs.createReadStream(filePath),
-        },
-        fields: 'id, webContentLink',
-      });
-
-      const fileId = driveResponse.data.id!;
-
-      // Make file publicly accessible
-      await drive.permissions.create({
-        fileId: fileId,
-        requestBody: {
-          role: 'reader',
-          type: 'anyone',
-        },
-      });
-
-      // Get the public URL
-      const imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+      // Upload file securely and get public URL (includes path validation)
+      const imageUrl = await this.driveHelper.uploadImageAndGetPublicUrl(filePath);
 
       // Insert the image using the existing method
       await this.insertImageToSlide(presentationId, slideId, imageUrl);
@@ -251,42 +223,28 @@ export class SlideService implements ISlideService {
     objectId: string,
     startIndex: number,
     endIndex: number,
-    formatting: {
-      bold?: boolean;
-      italic?: boolean;
-      underline?: boolean;
-      foregroundColor?: { red: number; green: number; blue: number };
-    }
+    formatting: TextFormatting
   ): Promise<void> {
     try {
-      const requests: any[] = [];
-      const textStyle: any = {};
-      const fields: string[] = [];
-
-      // Build text style object based on provided formatting
-      if (formatting.bold !== undefined) {
-        textStyle.bold = formatting.bold;
-        fields.push('bold');
-      }
-      if (formatting.italic !== undefined) {
-        textStyle.italic = formatting.italic;
-        fields.push('italic');
-      }
-      if (formatting.underline !== undefined) {
-        textStyle.underline = formatting.underline;
-        fields.push('underline');
-      }
+      // Validate color if provided
       if (formatting.foregroundColor) {
+        FormattingHelper.validateColor(formatting.foregroundColor);
+      }
+
+      const { style, fields } = FormattingHelper.buildTextFormatting(formatting);
+
+      // Convert formatting to Google Slides format (needs opaqueColor wrapper)
+      const textStyle: any = { ...style };
+      if (style.foregroundColor) {
         textStyle.foregroundColor = {
           opaqueColor: {
-            rgbColor: formatting.foregroundColor,
+            rgbColor: style.foregroundColor,
           },
         };
-        fields.push('foregroundColor');
       }
 
       // Create the update request
-      requests.push({
+      const requests = [{
         updateTextStyle: {
           objectId: objectId,
           textRange: {
@@ -297,7 +255,7 @@ export class SlideService implements ISlideService {
           style: textStyle,
           fields: fields.join(','),
         },
-      });
+      }];
 
       await this.slides.presentations.batchUpdate({
         presentationId: presentationId,

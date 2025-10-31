@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'googleapis-common';
 import { ISheetService } from '../interfaces/ISheetService.js';
+import { FormattingHelper, CellFormatting } from '../utils/FormattingHelper.js';
 
 /**
  * SheetService: Responsible ONLY for Google Sheets operations
@@ -94,44 +95,27 @@ export class SheetService implements ISheetService {
   async formatCells(
     spreadsheetId: string,
     range: string,
-    formatting: {
-      bold?: boolean;
-      italic?: boolean;
-      underline?: boolean;
-      foregroundColor?: { red: number; green: number; blue: number };
-      backgroundColor?: { red: number; green: number; blue: number };
-    }
+    formatting: CellFormatting
   ): Promise<void> {
     try {
+      // Validate colors if provided
+      if (formatting.foregroundColor) {
+        FormattingHelper.validateColor(formatting.foregroundColor);
+      }
+      if (formatting.backgroundColor) {
+        FormattingHelper.validateColor(formatting.backgroundColor);
+      }
+
       // Parse the range to extract sheet ID and cell range
       const parsedRange = await this._parseRange(spreadsheetId, range);
 
-      const textFormat: any = {};
-      const cellFormat: any = {};
-
-      // Build text format
-      if (formatting.bold !== undefined) {
-        textFormat.bold = formatting.bold;
-      }
-      if (formatting.italic !== undefined) {
-        textFormat.italic = formatting.italic;
-      }
-      if (formatting.underline !== undefined) {
-        textFormat.underline = formatting.underline;
-      }
-      if (formatting.foregroundColor) {
-        textFormat.foregroundColor = formatting.foregroundColor;
-      }
-
-      // Build cell format for background color
-      if (formatting.backgroundColor) {
-        cellFormat.backgroundColor = formatting.backgroundColor;
-      }
+      const { textFormat, cellFormat, hasTextFormat, hasCellFormat } =
+        FormattingHelper.buildCellFormatting(formatting);
 
       const requests: any[] = [];
 
       // Add text format request if there's any text formatting
-      if (Object.keys(textFormat).length > 0) {
+      if (hasTextFormat) {
         requests.push({
           repeatCell: {
             range: parsedRange,
@@ -146,7 +130,7 @@ export class SheetService implements ISheetService {
       }
 
       // Add background color request if specified
-      if (Object.keys(cellFormat).length > 0) {
+      if (hasCellFormat) {
         requests.push({
           repeatCell: {
             range: parsedRange,
