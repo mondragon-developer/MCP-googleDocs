@@ -1,0 +1,36 @@
+{
+  "name": "google-workspace-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Google Workspace (Docs, Sheets, Slides)",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "google-workspace-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "auth": "tsx src/authenticate.ts"
+  },
+  "keywords": [
+    "mcp",
+    "google-workspace",
+    "docs",
+    "sheets",
+    "slides"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "googleapis": "^144.0.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

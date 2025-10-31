@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "google-workspace": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\YOUR_USERNAME\\MCPProjects\\google-workspace-mcp\\dist\\index.js"
+      ]
+    }
+  }
+}
