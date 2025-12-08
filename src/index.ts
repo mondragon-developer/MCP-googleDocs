@@ -89,6 +89,7 @@ class GoogleWorkspaceMCPServer {
           tools.insertImageToDocTool,
           tools.insertLocalImageToDocTool,
           tools.formatTextInDocTool,
+          tools.insertTableToDocTool,
           // Sheet tools
           tools.createSpreadsheetTool,
           tools.readSheetTool,
@@ -239,6 +240,33 @@ class GoogleWorkspaceMCPServer {
                 {
                   type: "text",
                   text: "Text formatted successfully in document!",
+                },
+              ],
+            };
+          }
+
+          case "insert_table_to_doc": {
+            const { documentId, index, rows, columns, data, headerRow } = args as {
+              documentId: string;
+              index: number;
+              rows: number;
+              columns: number;
+              data: string[][];
+              headerRow?: boolean;
+            };
+            await this.documentService!.insertTable(
+              documentId,
+              index,
+              rows,
+              columns,
+              data,
+              headerRow
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Table inserted successfully!\nRows: ${rows}, Columns: ${columns}${headerRow ? ' (with header formatting)' : ''}\nURL: https://docs.google.com/document/d/${documentId}/edit`,
                 },
               ],
             };

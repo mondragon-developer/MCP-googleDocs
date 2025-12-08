@@ -83,6 +83,21 @@ export const formatTextInDocTool = {
   ),
 };
 
+export const insertTableToDocTool = {
+  name: 'insert_table_to_doc',
+  description: 'Inserts a native Google Docs table with data at a specific position. Creates actual table cells that support formatting, resizing, and sorting.',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      documentId: z.string().describe('The ID of the document'),
+      index: z.number().int().min(1).describe('Position in document where table should be inserted (1 = start)'),
+      rows: z.number().int().min(1).describe('Number of rows in the table'),
+      columns: z.number().int().min(1).describe('Number of columns in the table'),
+      data: z.array(z.array(z.string())).describe('2D array of cell contents (row-major order)'),
+      headerRow: z.boolean().optional().describe('Format first row as header (bold text, light gray background)'),
+    })
+  ),
+};
+
 // ==================== SHEET TOOLS ====================
 
 export const createSpreadsheetTool = {

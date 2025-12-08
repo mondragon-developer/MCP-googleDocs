@@ -221,4 +221,262 @@ export class DocumentService implements IDocumentService {
       throw new Error(`Failed to format text: ${error}`);
     }
   }
+
+  /**
+   * Inserts a native Google Docs table with data at a specific position
+   * @param documentId - The ID of the document
+   * @param index - Position in document where table should be inserted
+   * @param rows - Number of rows in the table
+   * @param columns - Number of columns in the table
+   * @param data - 2D array of cell contents (row-major order)
+   * @param headerRow - Whether to format the first row as a header
+   */
+  async insertTable(
+    documentId: string,
+    index: number,
+    rows: number,
+    columns: number,
+    data: string[][],
+    headerRow: boolean = false
+  ): Promise<void> {
+    try {
+      // Step 1: Insert an empty table
+      const insertTableRequest = {
+        insertTable: {
+          rows: rows,
+          columns: columns,
+          location: {
+            index: index,
+          },
+        },
+      };
+
+      await this.docs.documents.batchUpdate({
+        documentId: documentId,
+        requestBody: {
+          requests: [insertTableRequest],
+        },
+      });
+
+      // Step 2: Get the document to find the table structure and cell positions
+      const doc = await this.docs.documents.get({ documentId });
+      const body = doc.data.body?.content || [];
+
+      // Find the table we just inserted (should be near the index)
+      let table: any = null;
+      for (const element of body) {
+        if (element.table && element.startIndex != null && element.startIndex >= index) {
+          table = element;
+          break;
+        }
+      }
+
+      if (!table) {
+        throw new Error('Failed to find the inserted table in document');
+      }
+
+      // Step 3: Build requests to insert text into each cell and apply header formatting
+      const requests: any[] = [];
+      const headerCellRanges: { startIndex: number; endIndex: number }[] = [];
+
+      // Iterate through table rows and cells to insert text
+      const tableRows = table.table.tableRows || [];
+      for (let rowIdx = 0; rowIdx < tableRows.length && rowIdx < data.length; rowIdx++) {
+        const row = tableRows[rowIdx];
+        const tableCells = row.tableCells || [];
+
+        for (let colIdx = 0; colIdx < tableCells.length && colIdx < data[rowIdx].length; colIdx++) {
+          const cell = tableCells[colIdx];
+          const cellContent = data[rowIdx][colIdx];
+
+          if (cellContent && cellContent.length > 0) {
+            // Find the paragraph inside the cell to get the insert index
+            const cellElements = cell.content || [];
+            for (const cellElement of cellElements) {
+              if (cellElement.paragraph && cellElement.startIndex !== undefined) {
+                const insertIndex = cellElement.startIndex;
+
+                // Insert text into the cell
+                requests.push({
+                  insertText: {
+                    location: {
+                      index: insertIndex,
+                    },
+                    text: cellContent,
+                  },
+                });
+
+                // Track header row cell ranges for formatting
+                if (headerRow && rowIdx === 0) {
+                  headerCellRanges.push({
+                    startIndex: insertIndex,
+                    endIndex: insertIndex + cellContent.length,
+                  });
+                }
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Execute text insertion requests (in reverse order to maintain correct indices)
+      if (requests.length > 0) {
+        // Reverse the requests to insert from end to start (preserves indices)
+        requests.reverse();
+
+        await this.docs.documents.batchUpdate({
+          documentId: documentId,
+          requestBody: {
+            requests: requests,
+          },
+        });
+      }
+
+      // Step 4: Re-fetch document and apply borders + header formatting
+      const updatedDoc = await this.docs.documents.get({ documentId });
+      const updatedBody = updatedDoc.data.body?.content || [];
+
+      // Find the table again
+      let updatedTable: any = null;
+      for (const element of updatedBody) {
+        if (element.table && element.startIndex != null && element.startIndex >= index) {
+          updatedTable = element;
+          break;
+        }
+      }
+
+      if (updatedTable) {
+        const formattingRequests: any[] = [];
+        const tableStartIndex = updatedTable.startIndex;
+        const tableRows = updatedTable.table.tableRows || [];
+        const numRows = tableRows.length;
+        const numCols = tableRows[0]?.tableCells?.length || columns;
+
+        // Define border style - solid black 1pt border
+        const borderStyle = {
+          color: {
+            color: {
+              rgbColor: {
+                red: 0,
+                green: 0,
+                blue: 0,
+              },
+            },
+          },
+          width: {
+            magnitude: 1,
+            unit: 'PT',
+          },
+          dashStyle: 'SOLID',
+        };
+
+        // Apply borders to ALL cells in the table
+        for (let rowIdx = 0; rowIdx < numRows; rowIdx++) {
+          for (let colIdx = 0; colIdx < numCols; colIdx++) {
+            formattingRequests.push({
+              updateTableCellStyle: {
+                tableCellStyle: {
+                  borderTop: borderStyle,
+                  borderBottom: borderStyle,
+                  borderLeft: borderStyle,
+                  borderRight: borderStyle,
+                },
+                tableRange: {
+                  tableCellLocation: {
+                    tableStartLocation: {
+                      index: tableStartIndex,
+                    },
+                    rowIndex: rowIdx,
+                    columnIndex: colIdx,
+                  },
+                  rowSpan: 1,
+                  columnSpan: 1,
+                },
+                fields: 'borderTop,borderBottom,borderLeft,borderRight',
+              },
+            });
+          }
+        }
+
+        // Apply header formatting if requested
+        if (headerRow) {
+          const firstRow = tableRows[0];
+          if (firstRow) {
+            const headerCells = firstRow.tableCells || [];
+            for (let colIdx = 0; colIdx < headerCells.length; colIdx++) {
+              const cell = headerCells[colIdx];
+
+              // Apply bold formatting to header row text
+              const cellElements = cell.content || [];
+              for (const cellElement of cellElements) {
+                if (cellElement.paragraph) {
+                  const paragraphElements = cellElement.paragraph.elements || [];
+                  for (const elem of paragraphElements) {
+                    if (elem.textRun && elem.startIndex !== undefined && elem.endIndex !== undefined) {
+                      // Only format if there's actual text (not just newline)
+                      if (elem.textRun.content && elem.textRun.content.trim().length > 0) {
+                        formattingRequests.push({
+                          updateTextStyle: {
+                            range: {
+                              startIndex: elem.startIndex,
+                              endIndex: elem.endIndex,
+                            },
+                            textStyle: {
+                              bold: true,
+                            },
+                            fields: 'bold',
+                          },
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Apply light gray background to header cells
+              formattingRequests.push({
+                updateTableCellStyle: {
+                  tableCellStyle: {
+                    backgroundColor: {
+                      color: {
+                        rgbColor: {
+                          red: 0.9,
+                          green: 0.9,
+                          blue: 0.9,
+                        },
+                      },
+                    },
+                  },
+                  tableRange: {
+                    tableCellLocation: {
+                      tableStartLocation: {
+                        index: tableStartIndex,
+                      },
+                      rowIndex: 0,
+                      columnIndex: colIdx,
+                    },
+                    rowSpan: 1,
+                    columnSpan: 1,
+                  },
+                  fields: 'backgroundColor',
+                },
+              });
+            }
+          }
+        }
+
+        if (formattingRequests.length > 0) {
+          await this.docs.documents.batchUpdate({
+            documentId: documentId,
+            requestBody: {
+              requests: formattingRequests,
+            },
+          });
+        }
+      }
+    } catch (error) {
+      throw new Error(`Failed to insert table: ${error}`);
+    }
+  }
 }

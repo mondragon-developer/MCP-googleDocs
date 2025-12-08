@@ -27,4 +27,12 @@ export interface IDocumentService {
       foregroundColor?: { red: number; green: number; blue: number };
     }
   ): Promise<void>;
+  insertTable(
+    documentId: string,
+    index: number,
+    rows: number,
+    columns: number,
+    data: string[][],
+    headerRow?: boolean
+  ): Promise<void>;
 }
