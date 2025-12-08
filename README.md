@@ -8,6 +8,7 @@ A Model Context Protocol (MCP) server that enables Claude to create and manage G
 - Create and manage Google Sheets (read/write data, format cells)
 - Create and manage Google Slides presentations
 - Insert images (from URLs or local files) into documents and slides
+- **Insert native tables with borders** into Google Docs
 - Format text and cells (bold, italic, underline, colors)
 
 ## Prerequisites
@@ -140,6 +141,7 @@ Completely quit and restart Claude Desktop/Code (not just close the window).
 - `insert_image_to_doc` - Insert image from URL
 - `insert_local_image_to_doc` - Insert image from local file
 - `format_text_in_doc` - Format text (bold, italic, underline, color)
+- `insert_table_to_doc` - Insert a native table with borders and optional header formatting
 
 ### Google Sheets
 - `create_spreadsheet` - Create a new spreadsheet
@@ -164,6 +166,7 @@ Once connected, you can ask Claude:
 - "Create a new Google Doc called 'Meeting Notes'"
 - "Add this content to my document: [your text]"
 - "Make the title bold in my document"
+- "Insert a table with project tasks and status"
 
 **Spreadsheets:**
 - "Create a new spreadsheet called 'Q1 Budget'"
@@ -174,6 +177,47 @@ Once connected, you can ask Claude:
 - "Create a new presentation called 'Project Proposal'"
 - "Add a slide with the title 'Overview'"
 - "Insert this image into the first slide"
+
+## Table Feature
+
+The `insert_table_to_doc` tool creates native Google Docs tables with:
+- **Solid black borders** on all cells (1pt weight)
+- **Header row formatting** (optional) - bold text with light gray background
+- Proper cell structure that supports sorting, resizing, and formatting
+
+### Table Example
+
+When you ask Claude to insert a table, it creates a properly formatted table like this:
+
+![Table Example](screenshots/tables.png)
+
+### Table Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `documentId` | string | Yes | The Google Doc ID |
+| `index` | number | Yes | Position in document (1 = start) |
+| `rows` | number | Yes | Number of rows |
+| `columns` | number | Yes | Number of columns |
+| `data` | string[][] | Yes | 2D array of cell contents |
+| `headerRow` | boolean | No | Format first row as header (bold + gray background) |
+
+### Example Usage
+
+```json
+{
+  "documentId": "1abc123...",
+  "index": 1,
+  "rows": 3,
+  "columns": 2,
+  "data": [
+    ["Name", "Status"],
+    ["Task 1", "Complete"],
+    ["Task 2", "In Progress"]
+  ],
+  "headerRow": true
+}
+```
 
 ## Troubleshooting
 
