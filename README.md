@@ -128,6 +128,38 @@ A `token.json` file will be created with your access credentials.
 }
 ```
 
+#### Claude Code (CLI) - Global Setup
+
+To make the MCP available in all Claude Code sessions, edit `~/.claude/settings.json`:
+
+**Windows:** `C:\Users\YOUR_USERNAME\.claude\settings.json`
+
+```json
+{
+  "mcpServers": {
+    "google-workspace": {
+      "command": "node",
+      "args": ["C:\\Users\\YOUR_USERNAME\\path\\to\\google-workspace-mcp\\dist\\index.js"]
+    }
+  }
+}
+```
+
+**macOS/Linux:** `~/.claude/settings.json`
+
+```json
+{
+  "mcpServers": {
+    "google-workspace": {
+      "command": "node",
+      "args": ["/absolute/path/to/google-workspace-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+Verify with: `claude mcp list`
+
 ### 6. Restart Claude
 
 Completely quit and restart Claude Desktop/Code (not just close the window).
@@ -253,9 +285,43 @@ When you ask Claude to insert a table, it creates a properly formatted table lik
 - `credentials.json` - Contains your OAuth client secret
 - `token.json` - Contains your access tokens
 
-These files are already in `.gitignore`. If you need to share your project:
-- Use `credentials.example.json` as a template
-- Recipients must create their own credentials from Google Cloud Console
+These files are already in `.gitignore`.
+
+## For New Users Cloning This Repo
+
+If you cloned this repository, you must create your own Google Cloud credentials:
+
+1. **Go to [Google Cloud Console](https://console.cloud.google.com)**
+
+2. **Create a new project** (or select existing one)
+
+3. **Enable these APIs** (APIs & Services → Library):
+   - Google Docs API
+   - Google Sheets API
+   - Google Slides API
+   - Google Drive API
+
+4. **Configure OAuth consent screen** (APIs & Services → OAuth consent screen):
+   - User Type: External
+   - Add your email as a test user
+
+5. **Create OAuth credentials** (APIs & Services → Credentials):
+   - Click "Create Credentials" → "OAuth client ID"
+   - Application type: **Desktop app**
+   - Download the JSON file
+
+6. **Rename and place the file**:
+   - Rename downloaded file to `credentials.json`
+   - Place it in the project root directory
+
+7. **Run authentication**:
+   ```bash
+   npm install
+   npm run build
+   npm run auth
+   ```
+
+See `credentials.example.json` for the expected file structure
 
 ## Project Structure
 

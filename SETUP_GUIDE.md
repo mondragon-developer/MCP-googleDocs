@@ -161,6 +161,44 @@ A `token.json` file will be created - this contains your access token for the MC
    }
    ```
 
+### For Claude Code (CLI):
+
+To make the MCP available globally in all Claude Code sessions:
+
+1. Create or edit the settings file at `~/.claude/settings.json`:
+
+   **Windows:** `C:\Users\YOUR_USERNAME\.claude\settings.json`
+   **macOS/Linux:** `~/.claude/settings.json`
+
+2. Add the following configuration:
+   ```json
+   {
+     "mcpServers": {
+       "google-workspace": {
+         "command": "node",
+         "args": ["/absolute/path/to/google-workspace-mcp/dist/index.js"]
+       }
+     }
+   }
+   ```
+
+   **Windows example:**
+   ```json
+   {
+     "mcpServers": {
+       "google-workspace": {
+         "command": "node",
+         "args": ["C:\\Users\\YOUR_USERNAME\\path\\to\\google-workspace-mcp\\dist\\index.js"]
+       }
+     }
+   }
+   ```
+
+3. Restart Claude Code and verify with:
+   ```bash
+   claude mcp list
+   ```
+
 ## Step 6: Restart Claude
 
 1. Completely quit Claude Desktop/Code (not just close the window)
