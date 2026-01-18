@@ -119,6 +119,9 @@ class GoogleWorkspaceMCPServer {
           tools.searchFilesTool,
           tools.makeFilePublicTool,
           tools.insertLinkToDocTool,
+          tools.appendTextToDocTool,
+          tools.formatTitlesTool,
+          tools.formatFirstLineTool,
         ],
       };
     });
@@ -694,6 +697,51 @@ class GoogleWorkspaceMCPServer {
                 {
                   type: "text",
                   text: `Link inserted successfully!\nText: "${text}"\nURL: ${url}\nDocument: https://docs.google.com/document/d/${documentId}/edit`,
+                },
+              ],
+            };
+          }
+
+          case "append_text_to_doc": {
+            const { documentId, text } = args as {
+              documentId: string;
+              text: string;
+            };
+            await this.documentService!.appendText(documentId, text);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Text appended successfully!\nDocument: https://docs.google.com/document/d/${documentId}/edit`,
+                },
+              ],
+            };
+          }
+
+          case "format_titles_in_doc": {
+            const { documentId } = args as { documentId: string };
+            const result = await this.documentService!.formatTitles(documentId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Titles formatted successfully!\nTitles found and bolded: ${result.titlesFormatted}\nDocument: https://docs.google.com/document/d/${documentId}/edit`,
+                },
+              ],
+            };
+          }
+
+          case "format_first_line_as_title": {
+            const { documentId, fontSize } = args as {
+              documentId: string;
+              fontSize?: number;
+            };
+            await this.documentService!.formatFirstLineAsTitle(documentId, fontSize);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `First line formatted as title!\nDocument: https://docs.google.com/document/d/${documentId}/edit`,
                 },
               ],
             };

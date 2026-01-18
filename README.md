@@ -167,17 +167,20 @@ Verify with: `claude mcp list`
 
 Completely quit and restart Claude Desktop/Code (not just close the window).
 
-## Available Tools (29 total)
+## Available Tools (32 total)
 
-### Google Docs (8 tools)
+### Google Docs (11 tools)
 - `create_document` - Create a new Google Doc
 - `read_document` - Read document content
-- `update_document` - Replace document text
+- `update_document` - Replace ALL document text (fixed: now deletes entire content)
 - `insert_image_to_doc` - Insert image from URL
 - `insert_local_image_to_doc` - Insert image from local file
 - `format_text_in_doc` - Format text (bold, italic, underline, color)
 - `insert_table_to_doc` - Insert a native table with borders and header formatting
 - `insert_link_to_doc` - Insert clickable hyperlinks (for video links, URLs)
+- `append_text_to_doc` - Append text to end of document (no index needed)
+- `format_titles_in_doc` - Auto-detect and bold titles (emoji lines, headers, colons)
+- `format_first_line_as_title` - Format first line as bold title with larger font
 
 ### Google Sheets (4 tools)
 - `create_spreadsheet` - Create a new spreadsheet

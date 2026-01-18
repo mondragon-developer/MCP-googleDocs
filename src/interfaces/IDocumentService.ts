@@ -41,4 +41,7 @@ export interface IDocumentService {
     text: string,
     url: string
   ): Promise<void>;
+  appendText(documentId: string, text: string): Promise<void>;
+  formatTitles(documentId: string): Promise<{ titlesFormatted: number }>;
+  formatFirstLineAsTitle(documentId: string, fontSize?: number): Promise<void>;
 }

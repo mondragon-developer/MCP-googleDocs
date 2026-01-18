@@ -76,26 +76,30 @@ export class DocumentService implements IDocumentService {
   }
 
   /**
-   * Updates a document by replacing all content with new text
+   * Updates a document by replacing ALL content with new text
    * @param documentId - The ID of the document to update
    * @param text - The new text content
    */
   async updateDocument(documentId: string, text: string): Promise<void> {
     try {
-      // First, get the document to find its length
+      // Get the document to find the TOTAL length (last element's endIndex)
       const doc = await this.docs.documents.get({ documentId });
-      const contentLength = doc.data.body?.content?.[0]?.endIndex || 1;
+      const body = doc.data.body?.content || [];
+
+      // Get the last element's endIndex to delete ALL content
+      const lastElement = body[body.length - 1];
+      const documentEndIndex = lastElement?.endIndex || 1;
 
       const requests: any[] = [];
 
       // Only delete content if there's something to delete
-      // A new/empty document has contentLength of 2 (just the newline)
-      if (contentLength > 2) {
+      // A new/empty document has endIndex of 2 (just the newline)
+      if (documentEndIndex > 2) {
         requests.push({
           deleteContentRange: {
             range: {
               startIndex: 1,
-              endIndex: contentLength - 1,
+              endIndex: documentEndIndex - 1,
             },
           },
         });
@@ -540,6 +544,151 @@ export class DocumentService implements IDocumentService {
       });
     } catch (error) {
       throw new Error(`Failed to insert link: ${error}`);
+    }
+  }
+
+  /**
+   * Appends text to the end of a document
+   * @param documentId - The ID of the document
+   * @param text - The text to append
+   */
+  async appendText(documentId: string, text: string): Promise<void> {
+    try {
+      // Get document to find the end position
+      const doc = await this.docs.documents.get({ documentId });
+      const body = doc.data.body?.content || [];
+      const lastElement = body[body.length - 1];
+      const endIndex = (lastElement?.endIndex || 2) - 1;
+
+      await this.docs.documents.batchUpdate({
+        documentId: documentId,
+        requestBody: {
+          requests: [
+            {
+              insertText: {
+                location: { index: endIndex },
+                text: text,
+              },
+            },
+          ],
+        },
+      });
+    } catch (error) {
+      throw new Error(`Failed to append text: ${error}`);
+    }
+  }
+
+  /**
+   * Formats titles (lines ending with newline) as bold
+   * Finds text patterns that look like titles and makes them bold
+   * @param documentId - The ID of the document
+   * @param titlePattern - Optional regex pattern to match titles (default: lines followed by blank line or starting with emoji)
+   */
+  async formatTitles(documentId: string): Promise<{ titlesFormatted: number }> {
+    try {
+      const doc = await this.docs.documents.get({ documentId });
+      const body = doc.data.body?.content || [];
+
+      const requests: any[] = [];
+      let titlesFormatted = 0;
+
+      for (const element of body) {
+        if (element.paragraph) {
+          const paragraphElements = element.paragraph.elements || [];
+
+          for (const elem of paragraphElements) {
+            if (elem.textRun && elem.startIndex !== undefined && elem.endIndex !== undefined) {
+              const content = elem.textRun.content || '';
+              const trimmed = content.trim();
+
+              // Check if this looks like a title:
+              // - Starts with emoji
+              // - Is short (< 100 chars)
+              // - Ends with colon
+              // - Is all caps or Title Case with no period at end
+              const startsWithEmoji = /^[\u{1F300}-\u{1F9FF}]/u.test(trimmed);
+              const endsWithColon = trimmed.endsWith(':');
+              const isShortLine = trimmed.length > 0 && trimmed.length < 100 && !trimmed.includes('.');
+              const looksLikeHeader = /^[A-Z][^.]*$/.test(trimmed) && trimmed.length < 60;
+
+              if ((startsWithEmoji || endsWithColon || looksLikeHeader) && isShortLine) {
+                requests.push({
+                  updateTextStyle: {
+                    range: {
+                      startIndex: elem.startIndex,
+                      endIndex: elem.endIndex,
+                    },
+                    textStyle: { bold: true },
+                    fields: 'bold',
+                  },
+                });
+                titlesFormatted++;
+              }
+            }
+          }
+        }
+      }
+
+      if (requests.length > 0) {
+        await this.docs.documents.batchUpdate({
+          documentId: documentId,
+          requestBody: { requests },
+        });
+      }
+
+      return { titlesFormatted };
+    } catch (error) {
+      throw new Error(`Failed to format titles: ${error}`);
+    }
+  }
+
+  /**
+   * Formats the first line of a document as a title (bold and larger)
+   * @param documentId - The ID of the document
+   * @param fontSize - Optional font size in PT (default: 18)
+   */
+  async formatFirstLineAsTitle(
+    documentId: string,
+    fontSize: number = 18
+  ): Promise<void> {
+    try {
+      const doc = await this.docs.documents.get({ documentId });
+      const body = doc.data.body?.content || [];
+
+      // Find the first paragraph
+      for (const element of body) {
+        if (element.paragraph) {
+          const paragraphElements = element.paragraph.elements || [];
+          if (paragraphElements.length > 0) {
+            const firstElem = paragraphElements[0];
+            if (firstElem.textRun && firstElem.startIndex !== undefined && firstElem.endIndex !== undefined) {
+              await this.docs.documents.batchUpdate({
+                documentId: documentId,
+                requestBody: {
+                  requests: [
+                    {
+                      updateTextStyle: {
+                        range: {
+                          startIndex: firstElem.startIndex,
+                          endIndex: firstElem.endIndex,
+                        },
+                        textStyle: {
+                          bold: true,
+                          fontSize: { magnitude: fontSize, unit: 'PT' },
+                        },
+                        fields: 'bold,fontSize',
+                      },
+                    },
+                  ],
+                },
+              });
+              return;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      throw new Error(`Failed to format first line as title: ${error}`);
     }
   }
 }

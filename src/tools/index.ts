@@ -380,3 +380,35 @@ export const insertLinkToDocTool = {
     })
   ),
 };
+
+export const appendTextToDocTool = {
+  name: 'append_text_to_doc',
+  description: 'Appends text to the end of a Google Document. Easier than calculating indices.',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      documentId: z.string().describe('The ID of the document'),
+      text: z.string().describe('The text to append to the document'),
+    })
+  ),
+};
+
+export const formatTitlesTool = {
+  name: 'format_titles_in_doc',
+  description: 'Automatically detects and formats titles in a document as bold. Detects lines starting with emojis, ending with colons, or that look like headers.',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      documentId: z.string().describe('The ID of the document'),
+    })
+  ),
+};
+
+export const formatFirstLineTool = {
+  name: 'format_first_line_as_title',
+  description: 'Formats the first line of a document as a title (bold and larger font).',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      documentId: z.string().describe('The ID of the document'),
+      fontSize: z.number().min(8).max(72).optional().describe('Font size in points (default: 18)'),
+    })
+  ),
+};
