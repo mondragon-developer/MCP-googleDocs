@@ -245,3 +245,138 @@ export const formatTextInSlideTool = {
     })
   ),
 };
+
+// ==================== DRIVE TOOLS ====================
+
+export const listDriveFilesTool = {
+  name: 'list_drive_files',
+  description: 'Lists files and folders in Google Drive. Can list contents of a specific folder or search with a query.',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      folderId: z.string().optional().describe('Folder ID to list contents of (omit for root)'),
+      pageSize: z.number().int().min(1).max(100).optional().describe('Number of files to return (default 20, max 100)'),
+      pageToken: z.string().optional().describe('Token for pagination (from previous response)'),
+      query: z.string().optional().describe('Search query in Google Drive query syntax'),
+    })
+  ),
+};
+
+export const uploadFileTool = {
+  name: 'upload_file',
+  description: 'Uploads a local file to Google Drive. Supports any file type.',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      filePath: z.string().describe('Local file path to upload'),
+      folderId: z.string().optional().describe('Folder ID to upload to (omit for root)'),
+      fileName: z.string().optional().describe('Custom name for the file (defaults to original filename)'),
+    })
+  ),
+};
+
+export const downloadFileTool = {
+  name: 'download_file',
+  description: 'Downloads a file from Google Drive to a local path',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      fileId: z.string().describe('The ID of the file to download'),
+      destinationPath: z.string().describe('Local path where the file should be saved'),
+    })
+  ),
+};
+
+export const getFileContentTool = {
+  name: 'get_file_content',
+  description: 'Gets the text content of a file in Google Drive (works with Google Docs, text files, etc.)',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      fileId: z.string().describe('The ID of the file to read'),
+    })
+  ),
+};
+
+export const convertPdfToDocTool = {
+  name: 'convert_pdf_to_doc',
+  description: 'Converts a PDF file to a Google Doc using OCR. Useful for extracting text from scanned documents.',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      filePath: z.string().describe('Local path to the PDF file'),
+      folderId: z.string().optional().describe('Folder ID to save the converted doc to'),
+    })
+  ),
+};
+
+export const extractPdfTextTool = {
+  name: 'extract_pdf_text',
+  description: 'Extracts text content from a PDF file using Google OCR. Returns the extracted text directly.',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      filePath: z.string().describe('Local path to the PDF file'),
+    })
+  ),
+};
+
+export const createFolderTool = {
+  name: 'create_folder',
+  description: 'Creates a new folder in Google Drive',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      name: z.string().describe('Name of the folder to create'),
+      parentId: z.string().optional().describe('Parent folder ID (omit for root)'),
+    })
+  ),
+};
+
+export const deleteFileTool = {
+  name: 'delete_file',
+  description: 'Deletes a file or folder from Google Drive',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      fileId: z.string().describe('The ID of the file or folder to delete'),
+    })
+  ),
+};
+
+export const getFileMetadataTool = {
+  name: 'get_file_metadata',
+  description: 'Gets metadata about a file in Google Drive (name, size, type, dates, etc.)',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      fileId: z.string().describe('The ID of the file'),
+    })
+  ),
+};
+
+export const searchFilesTool = {
+  name: 'search_files',
+  description: 'Searches for files in Google Drive by name or content',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      searchQuery: z.string().describe('Search query (searches file names and content)'),
+      mimeType: z.string().optional().describe('Filter by MIME type (e.g., "application/pdf", "image/jpeg")'),
+      pageSize: z.number().int().min(1).max(100).optional().describe('Number of results (default 20, max 100)'),
+    })
+  ),
+};
+
+export const makeFilePublicTool = {
+  name: 'make_file_public',
+  description: 'Makes a file publicly accessible and returns a shareable URL',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      fileId: z.string().describe('The ID of the file to make public'),
+    })
+  ),
+};
+
+export const insertLinkToDocTool = {
+  name: 'insert_link_to_doc',
+  description: 'Inserts a clickable hyperlink into a Google Document. Useful for adding video links or any URL.',
+  inputSchema: zodToJsonSchema(
+    z.object({
+      documentId: z.string().describe('The ID of the document'),
+      index: z.number().int().min(1).describe('Position in document where link should be inserted (1 = start)'),
+      text: z.string().describe('The display text for the link'),
+      url: z.string().url().describe('The URL the link points to'),
+    })
+  ),
+};

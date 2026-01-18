@@ -35,4 +35,10 @@ export interface IDocumentService {
     data: string[][],
     headerRow?: boolean
   ): Promise<void>;
+  insertLink(
+    documentId: string,
+    index: number,
+    text: string,
+    url: string
+  ): Promise<void>;
 }

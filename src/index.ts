@@ -12,6 +12,7 @@ import { GoogleAuthService } from "./services/GoogleAuthService.js";
 import { DocumentService } from "./services/DocumentService.js";
 import { SheetService } from "./services/SheetService.js";
 import { SlideService } from "./services/SlideService.js";
+import { DriveService } from "./services/DriveService.js";
 
 // Import tool definitions
 import * as tools from "./tools/index.js";
@@ -29,6 +30,7 @@ class GoogleWorkspaceMCPServer {
   private documentService: DocumentService | null = null;
   private sheetService: SheetService | null = null;
   private slideService: SlideService | null = null;
+  private driveService: DriveService | null = null;
 
   constructor() {
     this.server = new Server(
@@ -60,6 +62,7 @@ class GoogleWorkspaceMCPServer {
     this.documentService = new DocumentService(authClient);
     this.sheetService = new SheetService(authClient);
     this.slideService = new SlideService(authClient);
+    this.driveService = new DriveService(authClient);
   }
 
   /**
@@ -68,7 +71,7 @@ class GoogleWorkspaceMCPServer {
    * After this check, services are guaranteed to be non-null (! is safe to use)
    */
   private ensureServicesInitialized(): void {
-    if (!this.documentService || !this.sheetService || !this.slideService) {
+    if (!this.documentService || !this.sheetService || !this.slideService || !this.driveService) {
       throw new Error('Services not initialized. This should not happen.');
     }
   }
@@ -103,6 +106,19 @@ class GoogleWorkspaceMCPServer {
           tools.insertImageToSlideTool,
           tools.insertLocalImageToSlideTool,
           tools.formatTextInSlideTool,
+          // Drive tools
+          tools.listDriveFilesTool,
+          tools.uploadFileTool,
+          tools.downloadFileTool,
+          tools.getFileContentTool,
+          tools.convertPdfToDocTool,
+          tools.extractPdfTextTool,
+          tools.createFolderTool,
+          tools.deleteFileTool,
+          tools.getFileMetadataTool,
+          tools.searchFilesTool,
+          tools.makeFilePublicTool,
+          tools.insertLinkToDocTool,
         ],
       };
     });
@@ -494,6 +510,190 @@ class GoogleWorkspaceMCPServer {
                 {
                   type: "text",
                   text: "Text formatted successfully in slide!",
+                },
+              ],
+            };
+          }
+
+          // ========== DRIVE OPERATIONS ==========
+          case "list_drive_files": {
+            const { folderId, pageSize, pageToken, query } = args as {
+              folderId?: string;
+              pageSize?: number;
+              pageToken?: string;
+              query?: string;
+            };
+            const result = await this.driveService!.listFiles(folderId, pageSize, pageToken, query);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Found ${result.files.length} files:\n\n${JSON.stringify(result, null, 2)}`,
+                },
+              ],
+            };
+          }
+
+          case "upload_file": {
+            const { filePath, folderId, fileName } = args as {
+              filePath: string;
+              folderId?: string;
+              fileName?: string;
+            };
+            const result = await this.driveService!.uploadFile(filePath, folderId, fileName);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `File uploaded successfully!\nFile ID: ${result.id}\nName: ${result.name}\nType: ${result.mimeType}\nView: ${result.webViewLink || `https://drive.google.com/file/d/${result.id}/view`}`,
+                },
+              ],
+            };
+          }
+
+          case "download_file": {
+            const { fileId, destinationPath } = args as {
+              fileId: string;
+              destinationPath: string;
+            };
+            const savedPath = await this.driveService!.downloadFile(fileId, destinationPath);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `File downloaded successfully!\nSaved to: ${savedPath}`,
+                },
+              ],
+            };
+          }
+
+          case "get_file_content": {
+            const { fileId } = args as { fileId: string };
+            const content = await this.driveService!.getFileContent(fileId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `File Content:\n\n${content}`,
+                },
+              ],
+            };
+          }
+
+          case "convert_pdf_to_doc": {
+            const { filePath, folderId } = args as {
+              filePath: string;
+              folderId?: string;
+            };
+            const result = await this.driveService!.convertPdfToGoogleDoc(filePath, folderId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `PDF converted to Google Doc successfully!\nDocument ID: ${result.documentId}\nName: ${result.name}\nURL: https://docs.google.com/document/d/${result.documentId}/edit`,
+                },
+              ],
+            };
+          }
+
+          case "extract_pdf_text": {
+            const { filePath } = args as { filePath: string };
+            const text = await this.driveService!.extractTextFromPdf(filePath);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Extracted Text from PDF:\n\n${text}`,
+                },
+              ],
+            };
+          }
+
+          case "create_folder": {
+            const { name, parentId } = args as {
+              name: string;
+              parentId?: string;
+            };
+            const result = await this.driveService!.createFolder(name, parentId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Folder created successfully!\nFolder ID: ${result.id}\nName: ${result.name}\nURL: https://drive.google.com/drive/folders/${result.id}`,
+                },
+              ],
+            };
+          }
+
+          case "delete_file": {
+            const { fileId } = args as { fileId: string };
+            await this.driveService!.deleteFile(fileId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "File deleted successfully!",
+                },
+              ],
+            };
+          }
+
+          case "get_file_metadata": {
+            const { fileId } = args as { fileId: string };
+            const metadata = await this.driveService!.getFileMetadata(fileId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `File Metadata:\n\n${JSON.stringify(metadata, null, 2)}`,
+                },
+              ],
+            };
+          }
+
+          case "search_files": {
+            const { searchQuery, mimeType, pageSize } = args as {
+              searchQuery: string;
+              mimeType?: string;
+              pageSize?: number;
+            };
+            const result = await this.driveService!.searchFiles(searchQuery, mimeType, pageSize);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Search Results (${result.files.length} files found):\n\n${JSON.stringify(result, null, 2)}`,
+                },
+              ],
+            };
+          }
+
+          case "make_file_public": {
+            const { fileId } = args as { fileId: string };
+            const publicUrl = await this.driveService!.makeFilePublic(fileId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `File is now public!\nPublic URL: ${publicUrl}`,
+                },
+              ],
+            };
+          }
+
+          case "insert_link_to_doc": {
+            const { documentId, index, text, url } = args as {
+              documentId: string;
+              index: number;
+              text: string;
+              url: string;
+            };
+            await this.documentService!.insertLink(documentId, index, text, url);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Link inserted successfully!\nText: "${text}"\nURL: ${url}\nDocument: https://docs.google.com/document/d/${documentId}/edit`,
                 },
               ],
             };

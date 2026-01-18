@@ -1,14 +1,17 @@
 # Google Workspace MCP Server
 
-A Model Context Protocol (MCP) server that enables Claude to create and manage Google Docs, Sheets, and Slides directly.
+A Model Context Protocol (MCP) server that enables Claude to create and manage Google Docs, Sheets, Slides, and Drive directly.
 
 ## Features
 
-- Create, read, and update Google Documents
-- Create and manage Google Sheets (read/write data, format cells)
-- Create and manage Google Slides presentations
+- **Google Docs**: Create, read, update documents with tables, images, and links
+- **Google Sheets**: Read/write data, format cells
+- **Google Slides**: Create presentations, add slides, text, and images
+- **Google Drive**: List, upload, download files, search, PDF text extraction
+- **PDF OCR**: Convert PDFs to Google Docs and extract text using Google's OCR
 - Insert images (from URLs or local files) into documents and slides
-- **Insert native tables with borders** into Google Docs
+- Insert native tables with borders, centered bold headers
+- Insert clickable hyperlinks (for video links, etc.)
 - Format text and cells (bold, italic, underline, colors)
 
 ## Prerequisites
@@ -164,24 +167,25 @@ Verify with: `claude mcp list`
 
 Completely quit and restart Claude Desktop/Code (not just close the window).
 
-## Available Tools
+## Available Tools (29 total)
 
-### Google Docs
+### Google Docs (8 tools)
 - `create_document` - Create a new Google Doc
 - `read_document` - Read document content
 - `update_document` - Replace document text
 - `insert_image_to_doc` - Insert image from URL
 - `insert_local_image_to_doc` - Insert image from local file
 - `format_text_in_doc` - Format text (bold, italic, underline, color)
-- `insert_table_to_doc` - Insert a native table with borders and optional header formatting
+- `insert_table_to_doc` - Insert a native table with borders and header formatting
+- `insert_link_to_doc` - Insert clickable hyperlinks (for video links, URLs)
 
-### Google Sheets
+### Google Sheets (4 tools)
 - `create_spreadsheet` - Create a new spreadsheet
 - `read_sheet` - Read data from a range
 - `write_sheet` - Write data to a range
 - `format_cells` - Format cells (bold, italic, underline, colors)
 
-### Google Slides
+### Google Slides (7 tools)
 - `create_presentation` - Create a new presentation
 - `read_presentation` - Get presentation data
 - `add_slide` - Add a new slide
@@ -189,6 +193,19 @@ Completely quit and restart Claude Desktop/Code (not just close the window).
 - `insert_image_to_slide` - Insert image from URL
 - `insert_local_image_to_slide` - Insert image from local file
 - `format_text_in_slide` - Format text in slides
+
+### Google Drive (10 tools)
+- `list_drive_files` - List files and folders in Drive
+- `upload_file` - Upload any file type to Drive
+- `download_file` - Download files from Drive
+- `get_file_content` - Read text content of files
+- `get_file_metadata` - Get file info (size, type, dates)
+- `create_folder` - Create folders in Drive
+- `delete_file` - Delete files or folders
+- `search_files` - Search files by name or content
+- `make_file_public` - Make file public and get shareable URL
+- `convert_pdf_to_doc` - Convert PDF to Google Doc using OCR
+- `extract_pdf_text` - Extract text from PDF files
 
 ## Usage Examples
 
@@ -199,6 +216,7 @@ Once connected, you can ask Claude:
 - "Add this content to my document: [your text]"
 - "Make the title bold in my document"
 - "Insert a table with project tasks and status"
+- "Add a link to this YouTube video in my document"
 
 **Spreadsheets:**
 - "Create a new spreadsheet called 'Q1 Budget'"
@@ -210,11 +228,24 @@ Once connected, you can ask Claude:
 - "Add a slide with the title 'Overview'"
 - "Insert this image into the first slide"
 
+**Drive:**
+- "List all files in my Google Drive"
+- "Upload this PDF to my Drive"
+- "Search for files containing 'report'"
+- "Extract text from this PDF file"
+- "Create a folder called 'Project Files'"
+- "Download this file from Drive"
+
+**PDF Processing:**
+- "Extract all text from this PDF: C:\path\to\file.pdf"
+- "Convert this PDF to a Google Doc so I can edit it"
+
 ## Table Feature
 
 The `insert_table_to_doc` tool creates native Google Docs tables with:
 - **Solid black borders** on all cells (1pt weight)
-- **Header row formatting** (optional) - bold text with light gray background
+- **Header row formatting** (optional) - bold text, centered, with light gray background
+- Automatic newline insertion to prevent cutting existing text
 - Proper cell structure that supports sorting, resizing, and formatting
 
 ### Table Example
@@ -329,8 +360,20 @@ See `credentials.example.json` for the expected file structure
 google-workspace-mcp/
 ├── src/                       # Source code
 │   ├── interfaces/            # TypeScript interfaces
+│   │   ├── IDocumentService.ts
+│   │   ├── ISheetService.ts
+│   │   ├── ISlideService.ts
+│   │   └── IDriveService.ts
 │   ├── services/              # Google API services
-│   ├── tools/                 # MCP tool definitions
+│   │   ├── GoogleAuthService.ts
+│   │   ├── DocumentService.ts
+│   │   ├── SheetService.ts
+│   │   ├── SlideService.ts
+│   │   └── DriveService.ts
+│   ├── utils/                 # Shared utilities
+│   │   ├── DriveUploadHelper.ts
+│   │   └── FormattingHelper.ts
+│   ├── tools/                 # MCP tool definitions (Zod schemas)
 │   ├── authenticate.ts        # Auth script
 │   └── index.ts              # Main MCP server
 ├── dist/                      # Compiled JavaScript (after build)
@@ -377,7 +420,3 @@ npm run dev
 ## License
 
 MIT
-
----
-
-**Happy automating with Claude and Google Workspace!**

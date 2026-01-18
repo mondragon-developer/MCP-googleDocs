@@ -229,7 +229,7 @@ export class DocumentService implements IDocumentService {
    * @param rows - Number of rows in the table
    * @param columns - Number of columns in the table
    * @param data - 2D array of cell contents (row-major order)
-   * @param headerRow - Whether to format the first row as a header
+   * @param headerRow - Whether to format the first row as a header (bold, centered, gray background)
    */
   async insertTable(
     documentId: string,
@@ -240,32 +240,47 @@ export class DocumentService implements IDocumentService {
     headerRow: boolean = false
   ): Promise<void> {
     try {
-      // Step 1: Insert an empty table
-      const insertTableRequest = {
-        insertTable: {
-          rows: rows,
-          columns: columns,
-          location: {
-            index: index,
-          },
-        },
-      };
-
+      // Step 1: Insert a newline before the table to avoid cutting existing text
+      // Then insert the table after the newline
       await this.docs.documents.batchUpdate({
         documentId: documentId,
         requestBody: {
-          requests: [insertTableRequest],
+          requests: [
+            {
+              insertText: {
+                location: { index: index },
+                text: '\n',
+              },
+            },
+          ],
         },
       });
 
-      // Step 2: Get the document to find the table structure and cell positions
+      // Step 2: Insert the table after the newline
+      const tableIndex = index + 1;
+      await this.docs.documents.batchUpdate({
+        documentId: documentId,
+        requestBody: {
+          requests: [
+            {
+              insertTable: {
+                rows: rows,
+                columns: columns,
+                location: { index: tableIndex },
+              },
+            },
+          ],
+        },
+      });
+
+      // Step 3: Get the document to find the table structure
       const doc = await this.docs.documents.get({ documentId });
       const body = doc.data.body?.content || [];
 
-      // Find the table we just inserted (should be near the index)
+      // Find the table we just inserted
       let table: any = null;
       for (const element of body) {
-        if (element.table && element.startIndex != null && element.startIndex >= index) {
+        if (element.table && element.startIndex != null && element.startIndex >= tableIndex) {
           table = element;
           break;
         }
@@ -275,44 +290,28 @@ export class DocumentService implements IDocumentService {
         throw new Error('Failed to find the inserted table in document');
       }
 
-      // Step 3: Build requests to insert text into each cell and apply header formatting
-      const requests: any[] = [];
-      const headerCellRanges: { startIndex: number; endIndex: number }[] = [];
+      // Step 4: Build requests to insert text into each cell
+      // Collect all cell insert positions first, then insert in reverse order
+      const cellInserts: { index: number; text: string; isHeader: boolean }[] = [];
 
-      // Iterate through table rows and cells to insert text
       const tableRows = table.table.tableRows || [];
       for (let rowIdx = 0; rowIdx < tableRows.length && rowIdx < data.length; rowIdx++) {
         const row = tableRows[rowIdx];
         const tableCells = row.tableCells || [];
 
-        for (let colIdx = 0; colIdx < tableCells.length && colIdx < data[rowIdx].length; colIdx++) {
+        for (let colIdx = 0; colIdx < tableCells.length && colIdx < (data[rowIdx]?.length || 0); colIdx++) {
           const cell = tableCells[colIdx];
           const cellContent = data[rowIdx][colIdx];
 
           if (cellContent && cellContent.length > 0) {
-            // Find the paragraph inside the cell to get the insert index
             const cellElements = cell.content || [];
             for (const cellElement of cellElements) {
               if (cellElement.paragraph && cellElement.startIndex !== undefined) {
-                const insertIndex = cellElement.startIndex;
-
-                // Insert text into the cell
-                requests.push({
-                  insertText: {
-                    location: {
-                      index: insertIndex,
-                    },
-                    text: cellContent,
-                  },
+                cellInserts.push({
+                  index: cellElement.startIndex,
+                  text: cellContent,
+                  isHeader: headerRow && rowIdx === 0,
                 });
-
-                // Track header row cell ranges for formatting
-                if (headerRow && rowIdx === 0) {
-                  headerCellRanges.push({
-                    startIndex: insertIndex,
-                    endIndex: insertIndex + cellContent.length,
-                  });
-                }
                 break;
               }
             }
@@ -320,163 +319,227 @@ export class DocumentService implements IDocumentService {
         }
       }
 
-      // Execute text insertion requests (in reverse order to maintain correct indices)
-      if (requests.length > 0) {
-        // Reverse the requests to insert from end to start (preserves indices)
-        requests.reverse();
+      // Sort by index descending to insert from end to start (preserves indices)
+      cellInserts.sort((a, b) => b.index - a.index);
+
+      // Insert all text content
+      if (cellInserts.length > 0) {
+        const insertRequests = cellInserts.map(cell => ({
+          insertText: {
+            location: { index: cell.index },
+            text: cell.text,
+          },
+        }));
 
         await this.docs.documents.batchUpdate({
           documentId: documentId,
-          requestBody: {
-            requests: requests,
-          },
+          requestBody: { requests: insertRequests },
         });
       }
 
-      // Step 4: Re-fetch document and apply borders + header formatting
+      // Step 5: Re-fetch document to get updated indices for formatting
       const updatedDoc = await this.docs.documents.get({ documentId });
       const updatedBody = updatedDoc.data.body?.content || [];
 
-      // Find the table again
+      // Find the table again with updated indices
       let updatedTable: any = null;
       for (const element of updatedBody) {
-        if (element.table && element.startIndex != null && element.startIndex >= index) {
+        if (element.table && element.startIndex != null && element.startIndex >= tableIndex) {
           updatedTable = element;
           break;
         }
       }
 
-      if (updatedTable) {
-        const formattingRequests: any[] = [];
-        const tableStartIndex = updatedTable.startIndex;
-        const tableRows = updatedTable.table.tableRows || [];
-        const numRows = tableRows.length;
-        const numCols = tableRows[0]?.tableCells?.length || columns;
+      if (!updatedTable) {
+        return; // Table exists but can't find it for formatting - still success
+      }
 
-        // Define border style - solid black 1pt border
-        const borderStyle = {
+      // Step 6: Apply borders to all cells and header formatting
+      const formattingRequests: any[] = [];
+      const tableStartIndex = updatedTable.startIndex;
+      const updatedTableRows = updatedTable.table.tableRows || [];
+      const numRows = updatedTableRows.length;
+      const numCols = updatedTableRows[0]?.tableCells?.length || columns;
+
+      // Define border style - solid black 1pt border
+      const borderStyle = {
+        color: {
           color: {
-            color: {
-              rgbColor: {
-                red: 0,
-                green: 0,
-                blue: 0,
-              },
-            },
+            rgbColor: { red: 0, green: 0, blue: 0 },
           },
-          width: {
-            magnitude: 1,
-            unit: 'PT',
-          },
-          dashStyle: 'SOLID',
-        };
+        },
+        width: { magnitude: 1, unit: 'PT' },
+        dashStyle: 'SOLID',
+      };
 
-        // Apply borders to ALL cells in the table
-        for (let rowIdx = 0; rowIdx < numRows; rowIdx++) {
-          for (let colIdx = 0; colIdx < numCols; colIdx++) {
-            formattingRequests.push({
-              updateTableCellStyle: {
-                tableCellStyle: {
-                  borderTop: borderStyle,
-                  borderBottom: borderStyle,
-                  borderLeft: borderStyle,
-                  borderRight: borderStyle,
-                },
-                tableRange: {
-                  tableCellLocation: {
-                    tableStartLocation: {
-                      index: tableStartIndex,
-                    },
-                    rowIndex: rowIdx,
-                    columnIndex: colIdx,
-                  },
-                  rowSpan: 1,
-                  columnSpan: 1,
-                },
-                fields: 'borderTop,borderBottom,borderLeft,borderRight',
+      // Apply borders to ALL cells
+      for (let rowIdx = 0; rowIdx < numRows; rowIdx++) {
+        for (let colIdx = 0; colIdx < numCols; colIdx++) {
+          formattingRequests.push({
+            updateTableCellStyle: {
+              tableCellStyle: {
+                borderTop: borderStyle,
+                borderBottom: borderStyle,
+                borderLeft: borderStyle,
+                borderRight: borderStyle,
               },
-            });
-          }
-        }
-
-        // Apply header formatting if requested
-        if (headerRow) {
-          const firstRow = tableRows[0];
-          if (firstRow) {
-            const headerCells = firstRow.tableCells || [];
-            for (let colIdx = 0; colIdx < headerCells.length; colIdx++) {
-              const cell = headerCells[colIdx];
-
-              // Apply bold formatting to header row text
-              const cellElements = cell.content || [];
-              for (const cellElement of cellElements) {
-                if (cellElement.paragraph) {
-                  const paragraphElements = cellElement.paragraph.elements || [];
-                  for (const elem of paragraphElements) {
-                    if (elem.textRun && elem.startIndex !== undefined && elem.endIndex !== undefined) {
-                      // Only format if there's actual text (not just newline)
-                      if (elem.textRun.content && elem.textRun.content.trim().length > 0) {
-                        formattingRequests.push({
-                          updateTextStyle: {
-                            range: {
-                              startIndex: elem.startIndex,
-                              endIndex: elem.endIndex,
-                            },
-                            textStyle: {
-                              bold: true,
-                            },
-                            fields: 'bold',
-                          },
-                        });
-                      }
-                    }
-                  }
-                }
-              }
-
-              // Apply light gray background to header cells
-              formattingRequests.push({
-                updateTableCellStyle: {
-                  tableCellStyle: {
-                    backgroundColor: {
-                      color: {
-                        rgbColor: {
-                          red: 0.9,
-                          green: 0.9,
-                          blue: 0.9,
-                        },
-                      },
-                    },
-                  },
-                  tableRange: {
-                    tableCellLocation: {
-                      tableStartLocation: {
-                        index: tableStartIndex,
-                      },
-                      rowIndex: 0,
-                      columnIndex: colIdx,
-                    },
-                    rowSpan: 1,
-                    columnSpan: 1,
-                  },
-                  fields: 'backgroundColor',
+              tableRange: {
+                tableCellLocation: {
+                  tableStartLocation: { index: tableStartIndex },
+                  rowIndex: rowIdx,
+                  columnIndex: colIdx,
                 },
-              });
-            }
-          }
-        }
-
-        if (formattingRequests.length > 0) {
-          await this.docs.documents.batchUpdate({
-            documentId: documentId,
-            requestBody: {
-              requests: formattingRequests,
+                rowSpan: 1,
+                columnSpan: 1,
+              },
+              fields: 'borderTop,borderBottom,borderLeft,borderRight',
             },
           });
         }
       }
+
+      // Apply header formatting if requested
+      if (headerRow && updatedTableRows.length > 0) {
+        const firstRow = updatedTableRows[0];
+        const headerCells = firstRow.tableCells || [];
+
+        for (let colIdx = 0; colIdx < headerCells.length; colIdx++) {
+          const cell = headerCells[colIdx];
+          const cellElements = cell.content || [];
+
+          for (const cellElement of cellElements) {
+            if (cellElement.paragraph) {
+              const paragraphStart = cellElement.startIndex;
+              const paragraphEnd = cellElement.endIndex;
+
+              // Center align the paragraph in header cells
+              if (paragraphStart !== undefined && paragraphEnd !== undefined) {
+                formattingRequests.push({
+                  updateParagraphStyle: {
+                    range: {
+                      startIndex: paragraphStart,
+                      endIndex: paragraphEnd,
+                    },
+                    paragraphStyle: {
+                      alignment: 'CENTER',
+                    },
+                    fields: 'alignment',
+                  },
+                });
+              }
+
+              // Bold the text in header cells
+              const paragraphElements = cellElement.paragraph.elements || [];
+              for (const elem of paragraphElements) {
+                if (elem.textRun && elem.startIndex !== undefined && elem.endIndex !== undefined) {
+                  const content = elem.textRun.content || '';
+                  if (content.trim().length > 0) {
+                    formattingRequests.push({
+                      updateTextStyle: {
+                        range: {
+                          startIndex: elem.startIndex,
+                          endIndex: elem.endIndex,
+                        },
+                        textStyle: {
+                          bold: true,
+                        },
+                        fields: 'bold',
+                      },
+                    });
+                  }
+                }
+              }
+            }
+          }
+
+          // Apply gray background to header cells
+          formattingRequests.push({
+            updateTableCellStyle: {
+              tableCellStyle: {
+                backgroundColor: {
+                  color: {
+                    rgbColor: { red: 0.9, green: 0.9, blue: 0.9 },
+                  },
+                },
+              },
+              tableRange: {
+                tableCellLocation: {
+                  tableStartLocation: { index: tableStartIndex },
+                  rowIndex: 0,
+                  columnIndex: colIdx,
+                },
+                rowSpan: 1,
+                columnSpan: 1,
+              },
+              fields: 'backgroundColor',
+            },
+          });
+        }
+      }
+
+      // Execute all formatting requests
+      if (formattingRequests.length > 0) {
+        await this.docs.documents.batchUpdate({
+          documentId: documentId,
+          requestBody: { requests: formattingRequests },
+        });
+      }
     } catch (error) {
       throw new Error(`Failed to insert table: ${error}`);
+    }
+  }
+
+  /**
+   * Inserts a hyperlink into a document at a specific position
+   * Useful for inserting video links or any other URL
+   * @param documentId - The ID of the document
+   * @param index - Position in document where link should be inserted
+   * @param text - The display text for the link
+   * @param url - The URL the link points to
+   */
+  async insertLink(
+    documentId: string,
+    index: number,
+    text: string,
+    url: string
+  ): Promise<void> {
+    try {
+      const endIndex = index + text.length;
+
+      // Insert text and apply link formatting in one batch
+      await this.docs.documents.batchUpdate({
+        documentId: documentId,
+        requestBody: {
+          requests: [
+            // First insert the text
+            {
+              insertText: {
+                location: {
+                  index: index,
+                },
+                text: text,
+              },
+            },
+            // Then apply the link formatting
+            {
+              updateTextStyle: {
+                range: {
+                  startIndex: index,
+                  endIndex: endIndex,
+                },
+                textStyle: {
+                  link: {
+                    url: url,
+                  },
+                },
+                fields: 'link',
+              },
+            },
+          ],
+        },
+      });
+    } catch (error) {
+      throw new Error(`Failed to insert link: ${error}`);
     }
   }
 }
